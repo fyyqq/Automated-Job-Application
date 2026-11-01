@@ -25,7 +25,8 @@ def build_message(job: dict) -> dict:
 
     head = (
         f"{score_icon(job.get('score'))} Score {job.get('score', '?')}: {job.get('title', '')}\n"
-        f"🏢 {job.get('company', '')}  📍 {job.get('location', '')}\n"
+        f"🏢 {job.get('company', '')}\n"
+        f"📍 {job.get('location', '')}\n"
         f"💡 {str(job.get('reason', ''))[:160]}\n"
         f"{checked}\n"
         f"{email_line}{warning_line}\n"
