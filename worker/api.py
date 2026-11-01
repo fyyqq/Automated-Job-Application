@@ -15,6 +15,7 @@ from emailfinder import MAX_EMAIL_JOBS, explain_blocked, explain_none_found, ema
 from filters import count_reasons, explain_empty_result, filter_jobs
 from llm import complete
 from scoring import PASS_SCORE, deep_check, explain_deep_blocked, explain_no_scores, load_resume, score_jobs
+from telegram import build_message
 
 app = FastAPI(title="automated-job-application-engine-worker")
 bearer = HTTPBearer(auto_error=False)
@@ -26,7 +27,7 @@ HTTP_HINTS = {
         ["Header Auth: Name 'Authorization', Value 'Bearer <token>' (one space, no quotes)", "After editing .env run: docker compose up -d"],
     ),
     404: (["Wrong URL path"], ["Check the endpoint name, e.g. /parse-alerts, /filter, /dedupe, /score, /health"]),
-    405: (["Wrong HTTP method"], ["Use POST for /parse-alerts, /filter, /dedupe, /score, /cover-note, /find-email and /llm-test; GET for /health"]),
+    405: (["Wrong HTTP method"], ["Use POST for /parse-alerts, /filter, /dedupe, /score, /cover-note, /find-email, /telegram-message and /llm-test; GET for /health"]),
     500: (
         ["worker/resume.txt is missing, empty, or still has [EXAMPLE] placeholders", "docker-compose.yml does not mount ./worker/resume.txt"],
         ["Fill in worker/resume.txt (copy worker/resume.example.txt)", "Then run: docker compose up -d"],
@@ -290,6 +291,21 @@ def find_email_endpoint(body: FindEmailRequest):
         result["debug"] = NO_SHORTLIST
     elif not found:
         result["debug"] = explain_none_found(len(not_found))
+    return result
+
+
+class TelegramRequest(BaseModel):
+    jobs: list[dict]
+
+
+@app.post("/telegram-message", dependencies=[Depends(require_token)])
+def telegram_message_endpoint(body: TelegramRequest):
+    messages = [build_message(job) for job in body.jobs]
+    print(f"/telegram-message messages={len(messages)}", flush=True)
+
+    result = {"message_count": len(messages), "messages": messages}
+    if not messages:
+        result["debug"] = NO_SHORTLIST
     return result
 
 
