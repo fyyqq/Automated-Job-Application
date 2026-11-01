@@ -12,7 +12,7 @@ from alerts import parse_linkedin_alert
 from dedupe import explain_no_new_jobs, sheet_row, split_new_jobs
 from filters import count_reasons, explain_empty_result, filter_jobs
 from llm import complete
-from scoring import PASS_SCORE, explain_no_scores, load_resume, score_jobs
+from scoring import PASS_SCORE, deep_check, explain_deep_blocked, explain_no_scores, load_resume, score_jobs
 
 app = FastAPI(title="automated-job-application-engine-worker")
 bearer = HTTPBearer(auto_error=False)
@@ -141,6 +141,7 @@ def dedupe_endpoint(body: DedupeRequest):
 
 class ScoreRequest(BaseModel):
     jobs: list[dict]
+    deep: bool = False
 
 
 @app.post("/score", dependencies=[Depends(require_token)])
@@ -151,9 +152,19 @@ def score_endpoint(body: ScoreRequest):
         raise HTTPException(status_code=500, detail=f"Cannot use worker/resume.txt: {e}")
 
     scored, failed = score_jobs(body.jobs, resume) if body.jobs else ([], [])
+
+    deep = {"enabled": body.deep, "pages_opened": 0, "stopped_reason": None}
+    if body.deep and scored:
+        scored, blocked, opened = deep_check(scored, resume)
+        deep.update(pages_opened=opened, stopped_reason=blocked)
+
     scored.sort(key=lambda job: job["score"], reverse=True)
     passed_count = sum(1 for job in scored if job["passed"])
-    print(f"/score scored={len(scored)} failed={len(failed)} passed={passed_count}", flush=True)
+    print(
+        f"/score scored={len(scored)} failed={len(failed)} passed={passed_count} "
+        f"deep_pages={deep['pages_opened']} stopped={deep['stopped_reason']}",
+        flush=True,
+    )
 
     # Jobs the model could not score are left out of `rows` so tomorrow's run tries them again.
     rows = [
@@ -166,12 +177,15 @@ def score_endpoint(body: ScoreRequest):
         "failed_count": len(failed),
         "passed_count": passed_count,
         "threshold": PASS_SCORE,
+        "deep": deep,
         "scored": scored,
         "rows": rows,
         "failed": failed,
     }
     if body.jobs and not scored:
         result["debug"] = explain_no_scores(failed)
+    if deep["stopped_reason"]:
+        result["warning"] = explain_deep_blocked(deep["stopped_reason"], deep["pages_opened"])
     return result
 
 
