@@ -39,6 +39,18 @@ HTTP_HINTS = {
 }
 DEFAULT_HINT = (["Unexpected worker error"], ["Run: docker compose logs worker --tail 50"])
 
+NO_SHORTLIST = {
+    "error_message": "No jobs were sent, so nothing was done",
+    "causes": [
+        "No job scored 75 or more in today's Score step (this is normal on a quiet day)",
+        "The n8n body filter j.passed removed every job",
+    ],
+    "solution": [
+        "Nothing to fix on a quiet day",
+        "To test the node anyway, temporarily use j.score >= 60 instead of j.passed in the JSON Body",
+    ],
+}
+
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error(request, exc: StarletteHTTPException):
@@ -213,7 +225,9 @@ def cover_note_endpoint(body: CoverNoteRequest):
     print(f"/cover-note written={len(notes)} failed={len(failed)} skipped={len(skipped)}", flush=True)
 
     result = {"written_count": len(notes), "failed_count": len(failed), "notes": notes, "failed": failed, "skipped": skipped}
-    if body.jobs and not notes:
+    if not body.jobs:
+        result["debug"] = NO_SHORTLIST
+    elif not notes:
         result["debug"] = explain_cover_failures(failed)
     return result
 
@@ -261,7 +275,9 @@ def find_email_endpoint(body: FindEmailRequest):
     }
     if blocked:
         result["warning"] = explain_blocked(blocked, searched)
-    elif body.jobs and not found:
+    elif not body.jobs:
+        result["debug"] = NO_SHORTLIST
+    elif not found:
         result["debug"] = explain_none_found(len(not_found))
     return result
 
