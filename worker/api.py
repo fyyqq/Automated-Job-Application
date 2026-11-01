@@ -26,10 +26,21 @@ HTTP_HINTS = {
         ["Header Auth: Name 'Authorization', Value 'Bearer <token>' (one space, no quotes)", "After editing .env run: docker compose up -d"],
     ),
     404: (["Wrong URL path"], ["Check the endpoint name, e.g. /parse-alerts, /filter, /dedupe, /score, /health"]),
-    405: (["Wrong HTTP method"], ["Use POST for /parse-alerts, /filter, /dedupe, /score and /llm-test; GET for /health"]),
+    405: (["Wrong HTTP method"], ["Use POST for /parse-alerts, /filter, /dedupe, /score, /cover-note, /find-email and /llm-test; GET for /health"]),
     500: (
         ["worker/resume.txt is missing, empty, or still has [EXAMPLE] placeholders", "docker-compose.yml does not mount ./worker/resume.txt"],
         ["Fill in worker/resume.txt (copy worker/resume.example.txt)", "Then run: docker compose up -d"],
+    ),
+    429: (
+        [
+            "The free OpenRouter allowance is used up: 50 requests/day (20/min) for the whole account, across all free models",
+            "A new API key or another free model does not help: the limit belongs to the account",
+        ],
+        [
+            "Wait until the reset time in error_message, then run again (the daily run is not affected tomorrow)",
+            "Or add 10 credits on openrouter.ai to raise free models to 1000 requests/day",
+            "Or switch LLM_PROVIDER to Claude Haiku (production plan) when it is wired",
+        ],
     ),
     501: (["LLM_PROVIDER is not set to 'openrouter'"], ["Set LLM_PROVIDER=openrouter in .env, then run: docker compose up -d"]),
     502: (

@@ -1,4 +1,6 @@
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import HTTPException
@@ -25,6 +27,8 @@ def complete(prompt: str, max_tokens: int) -> str:
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"OpenRouter request failed: {type(e).__name__}")
 
+    if resp.status_code == 429:
+        raise HTTPException(status_code=429, detail=rate_limit_message(resp))
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=resp.text[:300])
 
@@ -32,3 +36,13 @@ def complete(prompt: str, max_tokens: int) -> str:
     if not content:
         raise HTTPException(status_code=502, detail="Model returned empty content (reasoning may have used all max_tokens)")
     return content
+
+
+def rate_limit_message(resp) -> str:
+    # OpenRouter says when the daily free allowance resets, as epoch milliseconds in a header.
+    try:
+        reset_ms = int(resp.headers.get("X-RateLimit-Reset") or resp.json()["error"]["metadata"]["headers"]["X-RateLimit-Reset"])
+        when = datetime.fromtimestamp(reset_ms / 1000, ZoneInfo("Asia/Kuala_Lumpur")).strftime("%Y-%m-%d %H:%M")
+        return f"OpenRouter rate limit reached; the free allowance resets at {when} (Kuala Lumpur time)"
+    except (KeyError, TypeError, ValueError):
+        return "OpenRouter rate limit reached; try again later"

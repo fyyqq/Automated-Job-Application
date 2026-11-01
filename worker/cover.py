@@ -109,6 +109,8 @@ def write_cover_note(job: dict, resume: str, ask=complete) -> tuple[dict | None,
         try:
             note = clean_note(ask(build_cover_prompt(resume, job, feedback), max_tokens=COVER_MAX_TOKENS))
         except HTTPException as e:
+            if e.status_code == 429:
+                raise  # the daily allowance is gone; every other job would fail the same way
             # One bad model reply must not fail the other jobs; keep the reason and try once more.
             feedback = f"The model call failed: {e.detail}"
             continue
