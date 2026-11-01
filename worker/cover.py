@@ -1,10 +1,14 @@
 import os
 import re
 
+from fastapi import HTTPException
+
 from llm import complete
 
 MIN_WORDS, MAX_WORDS = 120, 180
 MAX_JOBS_PER_CALL = 10
+# A reasoning model can burn 5,000+ tokens thinking before it writes the ~250-token note.
+COVER_MAX_TOKENS = 12000
 
 PROMPT = """Write a short cover note for a job application, in English only.
 
@@ -99,7 +103,12 @@ def write_cover_note(job: dict, resume: str, ask=complete) -> tuple[dict | None,
     feedback = ""
     note = ""
     for _attempt in range(2):
-        note = clean_note(ask(build_cover_prompt(resume, job, feedback), max_tokens=6000))
+        try:
+            note = clean_note(ask(build_cover_prompt(resume, job, feedback), max_tokens=COVER_MAX_TOKENS))
+        except HTTPException as e:
+            # One bad model reply must not fail the other jobs; keep the reason and try once more.
+            feedback = f"The model call failed: {e.detail}"
+            continue
         feedback = problem_with(note)
         if not feedback:
             return {
@@ -116,7 +125,8 @@ def explain_cover_failures(failed: list[dict]) -> dict:
         "error_message": f"{len(failed)} cover note(s) could not be written",
         "causes": [
             f"The model kept missing the {MIN_WORDS}-{MAX_WORDS} word range or added placeholders",
-            "A free model may ignore length rules or return an empty reply",
+            "A free model may ignore length rules, or spend all its tokens thinking and return an empty reply",
+            "The free OpenRouter limit (20 requests/min, 50/day) may be used up",
         ],
         "solution": [
             "Run again; free models are not fully consistent",
