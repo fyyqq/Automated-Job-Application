@@ -224,7 +224,7 @@ class FindEmailRequest(BaseModel):
 
 @app.post("/find-email", dependencies=[Depends(require_token)])
 def find_email_endpoint(body: FindEmailRequest):
-    found, not_found, blocked, searched = [], [], None, 0
+    found, not_found, everyone, blocked, searched = [], [], [], None, 0
     web_results: dict[str, dict | None] = {}
 
     for job in body.jobs[:MAX_EMAIL_JOBS]:
@@ -240,11 +240,25 @@ def find_email_endpoint(body: FindEmailRequest):
             found.append({**job, **info})
         else:
             not_found.append({**job, "reason": f"search stopped: {blocked}" if blocked else "no matching career email found"})
+        # `jobs` keeps every job (email fields empty when none) so n8n can carry on to Telegram either way.
+        everyone.append({**job, "career_email": "", "email_source": "", "email_found_at": "", **(info or {})})
 
     skipped = body.jobs[MAX_EMAIL_JOBS:]
     print(f"/find-email found={len(found)} not_found={len(not_found)} searched={searched} stopped={blocked}", flush=True)
 
-    result = {"found_count": len(found), "not_found_count": len(not_found), "found": found, "not_found": not_found, "skipped": skipped, "stopped_reason": blocked}
+    result = {
+        "found_count": len(found),
+        "not_found_count": len(not_found),
+        "jobs": everyone,
+        "rows": [
+            {"Dedupe Key": job.get("dedupe_key", ""), "Career Email": job["career_email"], "Email Source": job["email_source"]}
+            for job in found
+        ],
+        "found": found,
+        "not_found": not_found,
+        "skipped": skipped,
+        "stopped_reason": blocked,
+    }
     if blocked:
         result["warning"] = explain_blocked(blocked, searched)
     elif body.jobs and not found:
