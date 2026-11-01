@@ -16,7 +16,10 @@ Rules:
 - {min_words} to {max_words} words, counting everything you write. Aim for about 150.
 - Start with "Dear Hiring Team," then 2 or 3 short paragraphs. No sign-off and no name: they are added later.
 - Use ONLY facts that appear in the CANDIDATE RESUME below. Never invent employers, years, skills, projects or numbers.
-- Mention 2 or 3 things from the resume that match what this job asks for, and say why this company or role fits.
+- Name the company once. Open with the most relevant piece of work from the resume, not with a sentence about years of experience.
+- Pick 2 or 3 things from the resume that match this job, and give one concrete result for each (a number or what was built).
+- Do not mention education, a diploma or certificates unless the posting asks for them.
+- Do not list every skill. Only the ones this job needs.
 - Sound like a real junior-to-mid developer: plain, polite, specific. No buzzwords, no "I am writing to express my interest", no flattery.
 - Do not mention salary. No placeholders in brackets. No bullet points, no markdown, no subject line.
 {posting_rule}
