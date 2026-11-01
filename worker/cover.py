@@ -101,6 +101,12 @@ def sign_off(note: str) -> str:
     return f"{note}\n\nBest regards,\n{name}" if name else f"{note}\n\nBest regards"
 
 
+def email_subject(job: dict) -> str:
+    name = os.environ.get("CANDIDATE_NAME", "").strip()
+    subject = f"Application for {job.get('title') or 'the role'}"
+    return f"{subject} - {name}" if name else subject
+
+
 def write_cover_note(job: dict, resume: str, ask=complete) -> tuple[dict | None, str]:
     """Return (note_info, problem). note_info is None when no usable note came back."""
     feedback = ""

@@ -1,15 +1,16 @@
 import os
 import secrets
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from alerts import parse_linkedin_alert
-from cover import MAX_JOBS_PER_CALL, explain_cover_failures, write_cover_note
+from cover import MAX_JOBS_PER_CALL, email_subject, explain_cover_failures, write_cover_note
 from dedupe import explain_no_new_jobs, normalize, sheet_row, split_new_jobs
 from emailfinder import MAX_EMAIL_JOBS, explain_blocked, explain_none_found, email_from_posting, email_from_web
 from filters import count_reasons, explain_empty_result, filter_jobs
@@ -29,8 +30,8 @@ HTTP_HINTS = {
     404: (["Wrong URL path"], ["Check the endpoint name, e.g. /parse-alerts, /filter, /dedupe, /score, /health"]),
     405: (["Wrong HTTP method"], ["Use POST for /parse-alerts, /filter, /dedupe, /score, /cover-note, /find-email, /telegram-message and /llm-test; GET for /health"]),
     500: (
-        ["worker/resume.txt is missing, empty, or still has [EXAMPLE] placeholders", "docker-compose.yml does not mount ./worker/resume.txt"],
-        ["Fill in worker/resume.txt (copy worker/resume.example.txt)", "Then run: docker compose up -d"],
+        ["worker/resume.txt is missing, empty, or still has [EXAMPLE] placeholders", "docker-compose.yml does not mount ./worker/resume.txt", "/resume-pdf: worker/secrets/ has no PDF or more than one"],
+        ["Fill in worker/resume.txt (copy worker/resume.example.txt)", "For /resume-pdf: put exactly one .pdf in worker/secrets/", "Then run: docker compose up -d"],
     ),
     429: (
         [
@@ -230,7 +231,7 @@ def cover_note_endpoint(body: CoverNoteRequest):
     for job in body.jobs[:MAX_JOBS_PER_CALL]:
         info, problem = write_cover_note(job, resume)
         if info:
-            notes.append({**job, **info, "email_subject": f"Application for {job.get('title', 'the role')}"})
+            notes.append({**job, **info, "email_subject": email_subject(job)})
         else:
             failed.append({**job, "reason": problem})
     skipped = body.jobs[MAX_JOBS_PER_CALL:]
@@ -307,6 +308,15 @@ def telegram_message_endpoint(body: TelegramRequest):
     if not messages:
         result["debug"] = NO_SHORTLIST
     return result
+
+
+@app.get("/resume-pdf", dependencies=[Depends(require_token)])
+def resume_pdf():
+    """The real resume for Gmail drafts. It only travels inside the docker network, never to an AI."""
+    pdfs = sorted(Path(os.environ.get("SECRETS_DIR", "/app/secrets")).glob("*.pdf"))
+    if len(pdfs) != 1:
+        raise HTTPException(status_code=500, detail=f"Expected exactly 1 PDF in worker/secrets/, found {len(pdfs)}")
+    return FileResponse(pdfs[0], media_type="application/pdf", filename=pdfs[0].name)
 
 
 @app.post("/llm-test", dependencies=[Depends(require_token)])
