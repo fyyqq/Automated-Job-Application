@@ -10,7 +10,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from alerts import parse_linkedin_alert
 from cover import MAX_JOBS_PER_CALL, explain_cover_failures, write_cover_note
-from dedupe import explain_no_new_jobs, sheet_row, split_new_jobs
+from dedupe import explain_no_new_jobs, normalize, sheet_row, split_new_jobs
+from emailfinder import MAX_EMAIL_JOBS, explain_blocked, explain_none_found, email_from_posting, email_from_web
 from filters import count_reasons, explain_empty_result, filter_jobs
 from llm import complete
 from scoring import PASS_SCORE, deep_check, explain_deep_blocked, explain_no_scores, load_resume, score_jobs
@@ -214,6 +215,40 @@ def cover_note_endpoint(body: CoverNoteRequest):
     result = {"written_count": len(notes), "failed_count": len(failed), "notes": notes, "failed": failed, "skipped": skipped}
     if body.jobs and not notes:
         result["debug"] = explain_cover_failures(failed)
+    return result
+
+
+class FindEmailRequest(BaseModel):
+    jobs: list[dict]
+
+
+@app.post("/find-email", dependencies=[Depends(require_token)])
+def find_email_endpoint(body: FindEmailRequest):
+    found, not_found, blocked, searched = [], [], None, 0
+    web_results: dict[str, dict | None] = {}
+
+    for job in body.jobs[:MAX_EMAIL_JOBS]:
+        info = email_from_posting(job)
+        if info is None:
+            key = normalize(job.get("company"))
+            # The same company in two jobs is searched once, and nothing is searched after a block.
+            if key not in web_results and not blocked:
+                web_results[key], blocked = email_from_web(job)
+                searched += 1
+            info = web_results.get(key)
+        if info:
+            found.append({**job, **info})
+        else:
+            not_found.append({**job, "reason": f"search stopped: {blocked}" if blocked else "no matching career email found"})
+
+    skipped = body.jobs[MAX_EMAIL_JOBS:]
+    print(f"/find-email found={len(found)} not_found={len(not_found)} searched={searched} stopped={blocked}", flush=True)
+
+    result = {"found_count": len(found), "not_found_count": len(not_found), "found": found, "not_found": not_found, "skipped": skipped, "stopped_reason": blocked}
+    if blocked:
+        result["warning"] = explain_blocked(blocked, searched)
+    elif body.jobs and not found:
+        result["debug"] = explain_none_found(len(not_found))
     return result
 
 
