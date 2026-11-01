@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from alerts import parse_linkedin_alert
+from cover import MAX_JOBS_PER_CALL, explain_cover_failures, write_cover_note
 from dedupe import explain_no_new_jobs, sheet_row, split_new_jobs
 from filters import count_reasons, explain_empty_result, filter_jobs
 from llm import complete
@@ -186,6 +187,33 @@ def score_endpoint(body: ScoreRequest):
         result["debug"] = explain_no_scores(failed)
     if deep["stopped_reason"]:
         result["warning"] = explain_deep_blocked(deep["stopped_reason"], deep["pages_opened"])
+    return result
+
+
+class CoverNoteRequest(BaseModel):
+    jobs: list[dict]
+
+
+@app.post("/cover-note", dependencies=[Depends(require_token)])
+def cover_note_endpoint(body: CoverNoteRequest):
+    try:
+        resume = load_resume()
+    except (OSError, ValueError) as e:
+        raise HTTPException(status_code=500, detail=f"Cannot use worker/resume.txt: {e}")
+
+    notes, failed = [], []
+    for job in body.jobs[:MAX_JOBS_PER_CALL]:
+        info, problem = write_cover_note(job, resume)
+        if info:
+            notes.append({**job, **info, "email_subject": f"Application for {job.get('title', 'the role')}"})
+        else:
+            failed.append({**job, "reason": problem})
+    skipped = body.jobs[MAX_JOBS_PER_CALL:]
+    print(f"/cover-note written={len(notes)} failed={len(failed)} skipped={len(skipped)}", flush=True)
+
+    result = {"written_count": len(notes), "failed_count": len(failed), "notes": notes, "failed": failed, "skipped": skipped}
+    if body.jobs and not notes:
+        result["debug"] = explain_cover_failures(failed)
     return result
 
 
