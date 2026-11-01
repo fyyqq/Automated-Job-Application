@@ -1,0 +1,39 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=Asia/Kuala_Lumpur
+      - TZ=Asia/Kuala_Lumpur
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_SECURE_COOKIE=false
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - WORKER_TOKEN=${WORKER_TOKEN}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks: [jobnet]
+
+  worker:
+    build: ./worker
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Kuala_Lumpur
+      - WORKER_TOKEN=${WORKER_TOKEN}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DAILY_CAP=${DAILY_CAP}
+      - AUTO_SUBMIT=${AUTO_SUBMIT}
+      - LLM_PROVIDER=${LLM_PROVIDER}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
+    volumes:
+      - ./worker/secrets:/app/secrets:ro
+      - ./worker/resume.txt:/app/resume.txt:ro
+    networks: [jobnet]
+
+volumes:
+  n8n_data:
+
+networks:
+  jobnet:

@@ -1,0 +1,12 @@
+# Secrets and personal data: never commit these
+.env
+worker/secrets/
+worker/resume.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store

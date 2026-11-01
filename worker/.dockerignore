@@ -1,0 +1,4 @@
+secrets/
+resume.txt
+__pycache__/
+*.pyc
