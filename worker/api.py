@@ -1,7 +1,6 @@
 import os
 import secrets
 
-import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -12,11 +11,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from alerts import parse_linkedin_alert
 from dedupe import explain_no_new_jobs, sheet_row, split_new_jobs
 from filters import count_reasons, explain_empty_result, filter_jobs
+from llm import complete
+from scoring import PASS_SCORE, explain_no_scores, load_resume, score_jobs
 
 app = FastAPI(title="automated-job-application-engine-worker")
 bearer = HTTPBearer(auto_error=False)
-
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Every error response carries `error_message`, `causes` and `solution` so a failed n8n run explains itself.
 HTTP_HINTS = {
@@ -24,8 +23,12 @@ HTTP_HINTS = {
         ["Authorization header is missing or malformed", "The token in the n8n credential differs from WORKER_TOKEN in .env"],
         ["Header Auth: Name 'Authorization', Value 'Bearer <token>' (one space, no quotes)", "After editing .env run: docker compose up -d"],
     ),
-    404: (["Wrong URL path"], ["Check the endpoint name, e.g. /parse-alerts, /filter, /health"]),
-    405: (["Wrong HTTP method"], ["Use POST for /parse-alerts, /filter and /llm-test; GET for /health"]),
+    404: (["Wrong URL path"], ["Check the endpoint name, e.g. /parse-alerts, /filter, /dedupe, /score, /health"]),
+    405: (["Wrong HTTP method"], ["Use POST for /parse-alerts, /filter, /dedupe, /score and /llm-test; GET for /health"]),
+    500: (
+        ["worker/resume.txt is missing, empty, or still has [EXAMPLE] placeholders", "docker-compose.yml does not mount ./worker/resume.txt"],
+        ["Fill in worker/resume.txt (copy worker/resume.example.txt)", "Then run: docker compose up -d"],
+    ),
     501: (["LLM_PROVIDER is not set to 'openrouter'"], ["Set LLM_PROVIDER=openrouter in .env, then run: docker compose up -d"]),
     502: (
         ["OpenRouter rejected or failed the request", "Free-tier limit hit (20 requests/min, 50/day) or the model name is no longer valid"],
@@ -136,26 +139,35 @@ def dedupe_endpoint(body: DedupeRequest):
     return result
 
 
+class ScoreRequest(BaseModel):
+    jobs: list[dict]
+
+
+@app.post("/score", dependencies=[Depends(require_token)])
+def score_endpoint(body: ScoreRequest):
+    try:
+        resume = load_resume()
+    except (OSError, ValueError) as e:
+        raise HTTPException(status_code=500, detail=f"Cannot use worker/resume.txt: {e}")
+
+    scored, failed = score_jobs(body.jobs, resume) if body.jobs else ([], [])
+    scored.sort(key=lambda job: job["score"], reverse=True)
+    passed_count = sum(1 for job in scored if job["passed"])
+    print(f"/score scored={len(scored)} failed={len(failed)} passed={passed_count}", flush=True)
+
+    result = {
+        "scored_count": len(scored),
+        "failed_count": len(failed),
+        "passed_count": passed_count,
+        "threshold": PASS_SCORE,
+        "scored": scored,
+        "failed": failed,
+    }
+    if body.jobs and not scored:
+        result["debug"] = explain_no_scores(failed)
+    return result
+
+
 @app.post("/llm-test", dependencies=[Depends(require_token)])
 def llm_test():
-    if os.environ.get("LLM_PROVIDER") != "openrouter":
-        raise HTTPException(status_code=501, detail="Only the openrouter provider is wired up")
-
-    try:
-        resp = httpx.post(
-            OPENROUTER_URL,
-            headers={"Authorization": f"Bearer {os.environ.get('OPENROUTER_API_KEY', '')}"},
-            json={
-                "model": os.environ.get("OPENROUTER_MODEL", ""),
-                "messages": [{"role": "user", "content": "Reply with OK"}],
-                "max_tokens": 200,
-            },
-            timeout=60,
-        )
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"OpenRouter request failed: {type(e).__name__}")
-
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail=resp.text[:300])
-
-    return {"reply": resp.json()["choices"][0]["message"]["content"]}
+    return {"reply": complete("Reply with OK", max_tokens=200)}
