@@ -21,16 +21,16 @@ def url_id(url: str) -> str:
     return normalize(url).split("?")[0].rstrip("/")
 
 
-def sheet_row(job: dict) -> dict:
+def sheet_row(job: dict, score="", status="New") -> dict:
     return {
         "Date": datetime.now(ZoneInfo("Asia/Kuala_Lumpur")).strftime("%Y-%m-%d"),
         "Company": job.get("company", ""),
         "Position": job.get("title", ""),
         "URL": job.get("url", ""),
-        "Dedupe Key": job["dedupe_key"],
+        "Dedupe Key": job.get("dedupe_key") or dedupe_key(job.get("company"), job.get("title")),
         "Source": job.get("source", ""),
-        "Match Score": "",
-        "Status": "New",
+        "Match Score": score,
+        "Status": status,
     }
 
 

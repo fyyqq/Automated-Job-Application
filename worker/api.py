@@ -155,12 +155,19 @@ def score_endpoint(body: ScoreRequest):
     passed_count = sum(1 for job in scored if job["passed"])
     print(f"/score scored={len(scored)} failed={len(failed)} passed={passed_count}", flush=True)
 
+    # Jobs the model could not score are left out of `rows` so tomorrow's run tries them again.
+    rows = [
+        sheet_row(job, score=job["score"], status="Shortlisted" if job["passed"] else "Low score")
+        for job in scored
+    ]
+
     result = {
         "scored_count": len(scored),
         "failed_count": len(failed),
         "passed_count": passed_count,
         "threshold": PASS_SCORE,
         "scored": scored,
+        "rows": rows,
         "failed": failed,
     }
     if body.jobs and not scored:
