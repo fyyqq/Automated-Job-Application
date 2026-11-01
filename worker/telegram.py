@@ -16,7 +16,8 @@ def build_message(job: dict) -> dict:
     source = job.get("email_source") or ""
     if email:
         found_at = f"\n🔎 Found at: {job['email_found_at']}" if source == "web search" and job.get("email_found_at") else ""
-        email_line = f"📧 {email} (from {source}){found_at}\n✉️ A Gmail draft with this note is ready for you to send"
+        note = f"\nℹ️ {job['email_note']}" if job.get("email_note") else ""
+        email_line = f"📧 {email} (from {source}){found_at}{note}\n✉️ A Gmail draft with this note is ready for you to send"
     else:
         email_line = "📧 No career email found, apply through the link below"
 

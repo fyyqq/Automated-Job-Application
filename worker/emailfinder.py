@@ -33,8 +33,8 @@ last_search_at = 0.0
 
 
 def search_queries(company: str) -> list[str]:
-    # "Malaysia" keeps worldwide names (Google, Grab) pointed at the local office.
-    name = re.sub(r"\s+", " ", company or "").strip()
+    # "Malaysia" keeps worldwide names (Google, Grab) pointed at the local office; not repeated if the name has it.
+    name = re.sub(r"\s+", " ", re.sub(r"\bmalaysia\b", "", company or "", flags=re.IGNORECASE)).strip()
     return [f"{name} Malaysia career email", f"{name} Malaysia hr email"]
 
 
@@ -117,8 +117,17 @@ def pick_from_posting(description: str) -> str | None:
     return None
 
 
+def about_company(result: dict, company: str) -> bool:
+    """True when the page itself names the company (the address inside the text does not count)."""
+    words = company_words(company)
+    if not words:
+        return False
+    haystack = re.sub(r"[^a-z0-9]", "", f"{EMAIL.sub('', result['text'])} {result['url']}".lower())
+    return "".join(words) in haystack or (len(words[0]) >= 4 and words[0] in haystack)
+
+
 def domain_tier(email: str, result: dict, company: str) -> int | None:
-    """0 = a Malaysian (.my) address, 1 = a .com on the company's own site that mentions Malaysia, None = reject.
+    """0 = a Malaysian (.my) address, 1 = a .com/.co on a page about this company that mentions Malaysia, None = reject.
 
     Other country domains (.in, .sg, .co.uk) are most likely another office or another company.
     """
@@ -126,10 +135,21 @@ def domain_tier(email: str, result: dict, company: str) -> int | None:
     if domain.endswith(".my"):
         return 0
     if domain.rsplit(".", 1)[-1] in GENERIC_TLDS:
-        on_own_site = domain_matches_company(f"x@{urlparse(result['url']).netloc}", company)
-        if on_own_site and MALAYSIA_HINTS.search(f"{result['text']} {result['url']}"):
+        if about_company(result, company) and MALAYSIA_HINTS.search(f"{result['text']} {result['url']}"):
             return 1
     return None
+
+
+APPLY_CONTEXT = re.compile(r"application|apply|resume|\bcv\b|hiring|career|recruit", re.IGNORECASE)
+
+
+def hiring_rank(email: str, text: str, company: str) -> int:
+    """A mailbox the company itself names next to words like 'send your application to' is a hiring mailbox."""
+    rank = mailbox_rank(email, company)
+    at = text.lower().find(email)
+    if at >= 0 and APPLY_CONTEXT.search(text[max(0, at - 90) : at + len(email) + 40]):
+        return min(rank, 2)
+    return rank
 
 
 def pick_from_results(results: list[dict], company: str) -> tuple[str, str] | None:
@@ -140,7 +160,7 @@ def pick_from_results(results: list[dict], company: str) -> tuple[str, str] | No
             if domain in FREE_MAIL or not domain_matches_company(email, company):
                 continue
             tier = domain_tier(email, result, company)
-            rank = mailbox_rank(email, company)
+            rank = hiring_rank(email, result["text"], company)
             if tier is None or rank >= 99:
                 continue
             if best is None or (tier, rank) < best[0]:
@@ -148,11 +168,25 @@ def pick_from_results(results: list[dict], company: str) -> tuple[str, str] | No
     return (best[1], best[2]) if best else None
 
 
-def email_from_posting(job: dict) -> dict | None:
-    email = pick_from_posting(job.get("description") or "")
-    if not email:
-        return None
-    return {"career_email": email, "email_source": "job ad", "email_found_at": job.get("url", "")}
+def decide_email(job: dict, web: dict | None) -> dict | None:
+    """Research comes first. An address in the job ad is a candidate that research must confirm.
+
+    - ad email == researched email        -> "job ad + web search" (strongest)
+    - researched email only               -> "web search" (a different ad email is noted, not used)
+    - ad email only, domain matches company, not free mail -> "job ad (not confirmed by search)"
+    - ad email only, anything else        -> not used
+    """
+    ad = pick_from_posting(job.get("description") or "")
+    if web:
+        info = dict(web)
+        if ad and ad == web["career_email"]:
+            info["email_source"] = "job ad + web search"
+        elif ad:
+            info["email_note"] = f"The job ad lists {ad}, but research found {web['career_email']}. Using the researched one."
+        return info
+    if ad and ad.split("@", 1)[1] not in FREE_MAIL and domain_matches_company(ad, job.get("company", "")):
+        return {"career_email": ad, "email_source": "job ad (not confirmed by search)", "email_found_at": job.get("url", "")}
+    return None
 
 
 def email_from_web(job: dict, search=search_web) -> tuple[dict | None, str | None]:

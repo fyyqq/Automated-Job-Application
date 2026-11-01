@@ -12,7 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from alerts import parse_linkedin_alert
 from cover import MAX_JOBS_PER_CALL, email_subject, explain_cover_failures, write_cover_note
 from dedupe import explain_no_new_jobs, normalize, sheet_row, split_new_jobs
-from emailfinder import MAX_EMAIL_JOBS, explain_blocked, explain_none_found, email_from_posting, email_from_web
+from emailfinder import MAX_EMAIL_JOBS, decide_email, email_from_web, explain_blocked, explain_none_found
 from filters import count_reasons, explain_empty_result, filter_jobs
 from jobcache import JobCache
 from llm import complete
@@ -256,14 +256,12 @@ def find_email_endpoint(body: FindEmailRequest):
     web_results: dict[str, dict | None] = {}
 
     for job in body.jobs[:MAX_EMAIL_JOBS]:
-        info = email_from_posting(job)
-        if info is None:
-            key = normalize(job.get("company"))
-            # The same company in two jobs is searched once, and nothing is searched after a block.
-            if key not in web_results and not blocked:
-                web_results[key], blocked = email_from_web(job)
-                searched += 1
-            info = web_results.get(key)
+        key = normalize(job.get("company"))
+        # Research always runs. The same company in two jobs is searched once, and nothing is searched after a block.
+        if key not in web_results and not blocked:
+            web_results[key], blocked = email_from_web(job)
+            searched += 1
+        info = decide_email(job, web_results.get(key))
         if info:
             found.append({**job, **info})
         else:
