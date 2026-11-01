@@ -20,6 +20,8 @@ FREE_MAIL = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com
 # Mailboxes a company opens for applicants, best first. Anything else on the page looks personal and is skipped.
 HIRING_WORDS = ("career", "recruit", "hiring", "talent", "job", "hr", "humanresource", "people")
 GENERIC_BOXES = ("hello", "info", "contact", "enquiry", "enquiries", "admin", "office", "general")
+GENERIC_TLDS = {"com", "net", "org", "io", "co", "asia", "tech", "biz", "info", "app", "dev", "ai"}
+MALAYSIA_HINTS = re.compile(r"malaysia|kuala lumpur|selangor|petaling jaya|cyberjaya|shah alam|\+60|\.my\b", re.IGNORECASE)
 NO_REPLY = re.compile(r"no-?reply|donotreply|do-not-reply|mailer-daemon", re.IGNORECASE)
 
 
@@ -115,6 +117,21 @@ def pick_from_posting(description: str) -> str | None:
     return None
 
 
+def domain_tier(email: str, result: dict, company: str) -> int | None:
+    """0 = a Malaysian (.my) address, 1 = a .com on the company's own site that mentions Malaysia, None = reject.
+
+    Other country domains (.in, .sg, .co.uk) are most likely another office or another company.
+    """
+    domain = email.split("@", 1)[1]
+    if domain.endswith(".my"):
+        return 0
+    if domain.rsplit(".", 1)[-1] in GENERIC_TLDS:
+        on_own_site = domain_matches_company(f"x@{urlparse(result['url']).netloc}", company)
+        if on_own_site and MALAYSIA_HINTS.search(f"{result['text']} {result['url']}"):
+            return 1
+    return None
+
+
 def pick_from_results(results: list[dict], company: str) -> tuple[str, str] | None:
     best = None
     for result in results:
@@ -122,9 +139,12 @@ def pick_from_results(results: list[dict], company: str) -> tuple[str, str] | No
             domain = email.split("@", 1)[1]
             if domain in FREE_MAIL or not domain_matches_company(email, company):
                 continue
-            rank = (mailbox_rank(email, company), 0 if domain_matches_company(f"x@{urlparse(result['url']).netloc}", company) else 1)
-            if rank[0] < 99 and (best is None or rank < best[0]):
-                best = (rank, email, result["url"])
+            tier = domain_tier(email, result, company)
+            rank = mailbox_rank(email, company)
+            if tier is None or rank >= 99:
+                continue
+            if best is None or (tier, rank) < best[0]:
+                best = ((tier, rank), email, result["url"])
     return (best[1], best[2]) if best else None
 
 
