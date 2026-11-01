@@ -292,7 +292,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        1344,
+        1584,
         -16
       ],
       "id": "7e636e82-604e-4f71-aa9b-9216a25276d4",
@@ -312,11 +312,38 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1.1,
       "position": [
-        1184,
-        208
+        1360,
+        -16
       ],
       "id": "c564251b-d217-4a22-8fad-3d5467895c48",
       "name": "Split Out Rows"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://worker:8000/score",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jobs: $json.new }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1200,
+        192
+      ],
+      "id": "077f232d-95a5-4f64-9f24-df5d1f5d00a6",
+      "name": "Score",
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "A0v87HW8Kmv3oUvn",
+          "name": "Header Auth account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -396,7 +423,7 @@
       "main": [
         [
           {
-            "node": "Split Out Rows",
+            "node": "Score",
             "type": "main",
             "index": 0
           }
@@ -408,6 +435,17 @@
         [
           {
             "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score": {
+      "main": [
+        [
+          {
+            "node": "Split Out Rows",
             "type": "main",
             "index": 0
           }
