@@ -153,15 +153,35 @@ def score_jobs(
     return scored, failed
 
 
-def deep_check(scored: list[dict], resume: str, ask=complete, fetch=fetch_job_details):
-    """Open the pages of promising jobs and score them again with the real posting text."""
+def deep_check(scored: list[dict], resume: str, ask=complete, fetch=fetch_job_details, cache=None):
+    """Read the pages of promising jobs and score them again with the real posting text.
+
+    A page already in `cache` is not opened again, and after a LinkedIn rate limit no page is opened for a while.
+    Returns (jobs, blocked_reason, pages_opened, pages_from_cache).
+    """
     candidates = sorted(
         (job for job in scored if job["score"] >= DEEP_MIN_SCORE),
         key=lambda job: job["score"],
         reverse=True,
     )[:MAX_DEEP_PAGES]
-    details, blocked = fetch([job["url"] for job in candidates])
+    urls = [job["url"] for job in candidates]
 
+    cached = {url: cache.get(url) for url in urls if cache and cache.get(url)}
+    to_open = [url for url in urls if url not in cached]
+
+    fetched, blocked = {}, None
+    if to_open and cache and cache.cooldown_minutes():
+        blocked = f"LinkedIn limited us earlier, so no pages are opened for about {cache.cooldown_minutes()} more minutes"
+    elif to_open:
+        fetched, blocked = fetch(to_open)
+        if cache:
+            for url, found in fetched.items():
+                cache.put(url, found)
+            if blocked:
+                cache.block(blocked)
+            cache.save()
+
+    details = {**cached, **fetched}
     with_details = [{**job, **details[job["url"]]} for job in candidates if job["url"] in details]
     rescored, _ = score_jobs(with_details, resume, ask=ask, build=build_deep_prompt, batch_size=DEEP_BATCH_SIZE)
     final = {job["url"]: job for job in rescored}
@@ -172,11 +192,11 @@ def deep_check(scored: list[dict], resume: str, ask=complete, fetch=fetch_job_de
         if url in final:
             result.append({**final[url], "deep_checked": True})
         elif url in details:
-            # Page opened but the model gave no valid score: keep the title score, keep the text for the cover note.
+            # Page read but the model gave no valid score: keep the title score, keep the text for the cover note.
             result.append({**job, **details[url], "deep_checked": False})
         else:
             result.append({**job, "deep_checked": False})
-    return result, blocked, len(details)
+    return result, blocked, len(fetched), len(cached)
 
 
 def explain_deep_blocked(reason: str, pages_opened: int) -> dict:
@@ -189,7 +209,7 @@ def explain_deep_blocked(reason: str, pages_opened: int) -> dict:
         ],
         "solution": [
             "Nothing to do now: the remaining jobs keep their title-only score and are still logged",
-            "Do not retry in a loop; wait a few hours or until tomorrow's run",
+            "Do not retry in a loop: the worker now pauses page reads for 6 hours after a rate limit, and remembers pages it already read",
             "If it blocks every run, set deep to false in the n8n Score node body",
         ],
     }

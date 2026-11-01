@@ -31,10 +31,12 @@ services:
     volumes:
       - ./worker/secrets:/app/secrets:ro
       - ./worker/resume.txt:/app/resume.txt:ro
+      - worker_cache:/app/cache
     networks: [jobnet]
 
 volumes:
   n8n_data:
+  worker_cache:
 
 networks:
   jobnet:

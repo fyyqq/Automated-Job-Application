@@ -14,6 +14,7 @@ from cover import MAX_JOBS_PER_CALL, email_subject, explain_cover_failures, writ
 from dedupe import explain_no_new_jobs, normalize, sheet_row, split_new_jobs
 from emailfinder import MAX_EMAIL_JOBS, explain_blocked, explain_none_found, email_from_posting, email_from_web
 from filters import count_reasons, explain_empty_result, filter_jobs
+from jobcache import JobCache
 from llm import complete
 from scoring import PASS_SCORE, deep_check, explain_deep_blocked, explain_no_scores, load_resume, score_jobs
 from telegram import build_message
@@ -180,16 +181,16 @@ def score_endpoint(body: ScoreRequest):
 
     scored, failed = score_jobs(body.jobs, resume) if body.jobs else ([], [])
 
-    deep = {"enabled": body.deep, "pages_opened": 0, "stopped_reason": None}
+    deep = {"enabled": body.deep, "pages_opened": 0, "pages_from_cache": 0, "stopped_reason": None}
     if body.deep and scored:
-        scored, blocked, opened = deep_check(scored, resume)
-        deep.update(pages_opened=opened, stopped_reason=blocked)
+        scored, blocked, opened, from_cache = deep_check(scored, resume, cache=JobCache())
+        deep.update(pages_opened=opened, pages_from_cache=from_cache, stopped_reason=blocked)
 
     scored.sort(key=lambda job: job["score"], reverse=True)
     passed_count = sum(1 for job in scored if job["passed"])
     print(
         f"/score scored={len(scored)} failed={len(failed)} passed={passed_count} "
-        f"deep_pages={deep['pages_opened']} stopped={deep['stopped_reason']}",
+        f"deep_pages={deep['pages_opened']} cached={deep['pages_from_cache']} stopped={deep['stopped_reason']}",
         flush=True,
     )
 
