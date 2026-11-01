@@ -1,0 +1,48 @@
+# TRIMMED RESUME - read by the AI job scorer
+# Copy this file to resume.txt (git-ignored) and fill it in.
+#
+# RULES
+# - Lines starting with # are ignored.
+# - Do NOT write your IC number, home address, phone number or email here.
+#   The free staging model may log what it receives.
+# - Keep it short and factual. Only write what is true.
+
+
+TARGET ROLE
+[Role family, level, employment type, locations]
+
+
+YEARS OF EXPERIENCE
+[e.g. 3 years professional experience]
+
+
+CORE SKILLS (strongest first)
+[comma-separated list]
+
+
+ALSO FAMILIAR WITH
+[comma-separated list]
+
+
+WORK EXPERIENCE (newest first)
+[Job title, Company (type), Month Year - Month Year]
+- [Achievement with a number]
+- [Achievement with a number]
+
+
+PROJECTS
+- [Project (stack): one line]
+
+
+EDUCATION
+[Qualification, Institution, Years]
+
+
+LANGUAGES
+[Language (level)]
+
+
+PREFERENCES AND DEAL-BREAKERS
+- [What you prefer: company type, role focus]
+- [What to avoid]
+- [Minimum salary, optional]
