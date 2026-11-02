@@ -1,25 +1,6 @@
 {
-  "_help": [
-    "Copy this file to worker/secrets/sites.json and fill it in. That folder is git-ignored.",
-    "One block per job site. Use a DIFFERENT password for each site, never your Google password.",
-    "match: a word from the site's web address (example: randstad) so the worker picks the right login.",
-    "login_url: the page where you type your email and password (optional, can stay empty).",
-    "Remove the _help lines in your real file if you like; the worker ignores keys that start with _."
-  ],
-  "sites": [
-    {
-      "name": "Randstad",
-      "match": "randstad",
-      "login_url": "",
-      "email": "",
-      "password": ""
-    },
-    {
-      "name": "Example Site",
-      "match": "example",
-      "login_url": "",
-      "email": "",
-      "password": ""
-    }
-  ]
+  "_help": "Copy this file to worker/secrets/sites.json and fill it in (that folder is git-ignored). Used for any job site that asks you to sign in. Keys starting with _ are ignored.",
+  "email": "",
+  "username": "",
+  "password": ""
 }
