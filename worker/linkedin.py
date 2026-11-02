@@ -9,8 +9,23 @@ PAGE_DELAY_SECONDS = (8, 15)
 MAX_DESCRIPTION_CHARS = 3000
 
 
+# On a public job page the Apply button of an outside-site job carries "apply-link-offsite" in its markup.
+OFFSITE_MARKER = re.compile(r"apply-link-offsite|offsite-apply-icon")
+ONSITE_MARKER = re.compile(r"apply-link-onsite")
+EASY_APPLY_TEXT = re.compile(r"easy\s*apply", re.IGNORECASE)
+
+
 class BlockedError(Exception):
     pass
+
+
+def apply_type(html: str, button_text: str = "") -> str:
+    """'outside_site', 'easy_apply' or 'unknown'. Unknown is never guessed into one of the others."""
+    if OFFSITE_MARKER.search(html or ""):
+        return "outside_site"
+    if ONSITE_MARKER.search(html or "") or EASY_APPLY_TEXT.search(button_text or ""):
+        return "easy_apply"
+    return "unknown"
 
 
 def clean(text: str) -> str:
@@ -30,7 +45,9 @@ def extract_details(page) -> dict:
         if header and value:
             criteria[header.inner_text().strip()] = value.inner_text().strip()
 
+    buttons = page.query_selector(".top-card-layout__cta-container")
     return {
+        "apply_type": apply_type(page.content(), buttons.inner_text() if buttons else ""),
         "description": clean(description.inner_text())[:MAX_DESCRIPTION_CHARS],
         "employment_type": criteria.get("Employment type", ""),
         "seniority": criteria.get("Seniority level", ""),

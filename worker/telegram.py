@@ -10,6 +10,17 @@ def score_icon(score) -> str:
     return "🟢" if score >= 75 else "🟡"
 
 
+APPLY_LINES = {
+    "easy_apply": "⚡ Easy Apply on LinkedIn: apply by hand with the button below",
+    "outside_site": "🌐 Applies on the company's own site",
+}
+
+
+def wanted_in_telegram(job: dict) -> bool:
+    """Outside-site jobs are handled by the form filler, so they only reach Telegram when a draft email needs sending."""
+    return job.get("apply_type") != "outside_site" or bool(job.get("career_email"))
+
+
 def build_message(job: dict) -> dict:
     """Plain text only (no parse_mode), so symbols in a cover note can never break the message."""
     email = job.get("career_email") or ""
@@ -21,6 +32,7 @@ def build_message(job: dict) -> dict:
     else:
         email_line = "📧 No career email found, apply through the link below"
 
+    apply_line = f"{APPLY_LINES[job['apply_type']]}\n" if job.get("apply_type") in APPLY_LINES else ""
     checked = "✅ read the full job post" if job.get("deep_checked") else "⚠️ title only, the post was not read"
     warnings = job.get("warnings") or []
     warning_line = "\n⚠️ Check before sending: " + " ".join(warnings) if warnings else ""
@@ -31,6 +43,7 @@ def build_message(job: dict) -> dict:
         f"📍 {job.get('location', '')}\n"
         f"💡 {str(job.get('reason', ''))[:160]}\n"
         f"{checked}\n"
+        f"{apply_line}"
         f"{email_line}{warning_line}\n"
         f"🔗 Source: {job.get('source', '')}\n\n"
         f"✍️ Cover note:\n"

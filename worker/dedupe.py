@@ -32,6 +32,7 @@ def sheet_row(job: dict, score="", status="New") -> dict:
         "Match Score": score,
         "Status": status,
         "Desc Checked": "yes" if job.get("deep_checked") else "no",
+        "Apply Type": job.get("apply_type") or "unknown",
     }
 
 

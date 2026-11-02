@@ -17,7 +17,7 @@ from filters import count_reasons, explain_empty_result, filter_jobs
 from jobcache import JobCache
 from llm import complete
 from scoring import PASS_SCORE, deep_check, explain_deep_blocked, explain_no_scores, load_resume, score_jobs
-from telegram import build_message
+from telegram import build_message, wanted_in_telegram
 
 app = FastAPI(title="automated-job-application-engine-worker")
 bearer = HTTPBearer(auto_error=False)
@@ -300,7 +300,7 @@ class TelegramRequest(BaseModel):
 
 @app.post("/telegram-message", dependencies=[Depends(require_token)])
 def telegram_message_endpoint(body: TelegramRequest):
-    messages = [build_message(job) for job in body.jobs]
+    messages = [build_message(job) for job in body.jobs if wanted_in_telegram(job)]
     print(f"/telegram-message messages={len(messages)}", flush=True)
 
     result = {"message_count": len(messages), "messages": messages}
